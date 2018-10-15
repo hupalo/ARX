@@ -1,0 +1,135 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import skfuzzy
+import sys
+
+
+reload(sys)
+sys.setdefaultencoding('utf-8')
+# Collecting data from .xlsx file
+arx_data = pd.read_excel('arx_data.xlsx', names = ['Amostra', 'Entrada', 'Saída'])
+
+# Creating the vectors
+index = arx_data.iloc[: , 0]
+u = arx_data.iloc[: , 1]
+u_len = len(u);
+u_test = arx_data.iloc[500:u_len, 1]
+y = arx_data.iloc[: , 2]
+y_len = len(y)
+y_test = arx_data.iloc[500:y_len, 2]
+
+# ********************************* Model *************************************
+#
+# y[k] = -a_1*y[k-1] - ... - a_na*y[k-na] + b_0*u[k-nk] + ... + b_nb*u[k-nb-nk]
+#
+#
+
+# Model order
+# For example, ARX(2,2,1): y[k] = -a1*y[k-1] - a2*y[k-2] + b0*u[k-1] + b1*u[k-2] + b2*u[k-3]
+na = 2
+nb = 2
+nk = 1
+
+# Number of data points used for estimation
+N = 300
+
+
+# Initializing
+Y = []
+U = []
+theta = []
+
+# Create the matrix 'fi'
+fi_rows = N;
+fi_columns = na + nb + nk;
+fi = []
+
+for i in range(fi_rows):
+    fi.append([0]*fi_columns)
+
+# First rows of 'fi' for ARX(2,2,1)
+fi[0] = [0, 0, 0, 0, 0]
+fi[1] = [-y[0], 0, u[0], 0, 0]
+fi[2] = [-y[1], -y[0], u[1], u[0], 0]
+
+s = 3;
+while s < fi_rows:
+    ii = 3;
+    while ii < N:
+        fi[s] = [-y[ii-1], -y[ii-2], u[ii-1], u[ii-2], u[ii-3]]
+        s+=1
+        ii+=1
+
+for iii in range(0, N):
+    Y.append(y[iii])
+    U.append(u[iii])
+
+
+fi = np.matrix(fi)
+fi_t = np.matrix.transpose(fi)
+
+theta = np.dot(np.dot(np.linalg.inv(np.dot(fi_t,fi)),fi_t),Y)
+theta = np.matrix.transpose(theta)
+a1 = theta[0] 
+a2 = theta[1]
+b0 = theta[2]
+b1 = theta[3]
+b2 = theta[4]
+
+y_est = []
+for iv in range(500,u_len):
+    y_est.append([0])
+
+y_est[0] = 0
+y_est[1] = -a1*y_test[500] + b0*u_test[500]
+y_est[2] = -a1*y_test[501] - a2*y_test[500] + b0*u_test[501] + b1*u_test[500]
+
+
+h = 3
+v = 503
+while True:
+    while v < u_len:
+        y_est[h] = -a1*y_test[v-1] - a2*y_test[v-2] + b0*u_test[v-1] + b1*u_test[v-2] + b2*u_test[v-3]
+        h+=1
+        v+=1
+    break
+
+# Calculates the Normalised Mean Square Error in %
+error = skfuzzy.nmse(y_test, y_est)
+
+
+plt.figure(1)
+plt.subplot(211)
+plt.plot(u_test)
+plt.title('Matlab system input')
+
+plt.subplot(212)
+plt.plot(y_test)
+plt.title('Matlab system output')
+plt.show()
+
+
+plt.figure(2)
+plt.subplot(211)
+plt.plot(u_test, 'r')
+plt.title('Model system input')
+
+plt.subplot(212)
+plt.plot(y_est, 'r')
+plt.title('Model system output')
+plt.show()
+
+plt.figure(3)
+plt.subplot(211)
+plt.plot(y_test, 'g')
+plt.ylim((-0.1, 0.1))
+plt.title('Matlab system output')
+
+plt.subplot(212)
+plt.plot(y_est, 'g')
+plt.title('Model system output')
+plt.ylim((-0.1, 0.1))
+plt.show()
+
+
